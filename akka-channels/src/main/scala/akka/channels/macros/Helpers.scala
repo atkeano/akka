@@ -19,6 +19,11 @@ object Helpers {
   def error(c: Context, msg: String) = c.error(c.enclosingPosition, msg)
   def abort(c: Context, msg: String) = c.abort(c.enclosingPosition, msg)
 
+  def imp[T: c.WeakTypeTag](c: Context): c.Expr[T] = {
+    import c.universe._
+    c.Expr[T](TypeApply(Ident("implicitly"), List(TypeTree().setType(weakTypeOf[T]))))
+  }
+
   def checkUnique(u: Universe)(channel: u.Type, list: u.Type): Option[String] = {
     val channels = inputChannels(u)(list) groupBy (_.erasure)
     val dupes = channels.get(channel.erasure).getOrElse(Nil).filterNot(_ =:= channel)

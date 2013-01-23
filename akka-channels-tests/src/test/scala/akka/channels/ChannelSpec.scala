@@ -84,7 +84,7 @@ object ChannelSpec {
   class WriteOnly[T1: ru.TypeTag, T2: ru.TypeTag](target: ChannelRef[(T1, T2) :+: TNil]) extends Channels[TNil, (D, D) :+: (T1, T2) :+: TNil] {
     channel[D] { (d, snd) ⇒ snd <-!- d }
     implicit val t = Timeout(1.second)
-    channel[T1] { (x, snd) ⇒ x -?-> target }
+    channel[T1] { (x, snd) ⇒ val f = x -?-> target }
   }
 
   class MissingChannel extends Channels[TNil, (A, A) :+: (B, B) :+: TNil] {

@@ -9,6 +9,7 @@ import scala.reflect.macros.Context
 import scala.reflect.api.Universe
 import akka.actor.ActorRef
 import akka.dispatch.ExecutionContexts
+import scala.reflect.api.{ TypeCreator }
 
 object Ask {
   import Helpers._
@@ -17,26 +18,56 @@ object Ask {
                                                                 type PrefixType = ChannelRef[T]
                                                               })(msg: c.Expr[M]): c.Expr[Future[_]] = {
     import c.universe._
-    askTree(c)(weakTypeOf[M], weakTypeOf[T])(reify(c.prefix.splice.actorRef), msg)
+
+    val chT = weakTypeOf[T]
+    val msgT = weakTypeOf[M]
+    val out = replyChannels(c.universe)(chT, msgT)
+    if (out.isEmpty)
+      abort(c, s"This ChannelRef does not support messages of type $msgT")
+
+    reify(askOps(c.prefix.splice.actorRef, msg.splice)(imp[Timeout](c).splice))
   }
 
   def opsImpl[T <: ChannelList: c.WeakTypeTag, M: c.WeakTypeTag](c: Context {
                                                                    type PrefixType = AnyOps[M]
                                                                  })(channel: c.Expr[ChannelRef[T]]): c.Expr[Future[_]] = {
     import c.universe._
-    askTree(c)(weakTypeOf[M], weakTypeOf[T])(reify(channel.splice.actorRef), reify(c.prefix.splice.value))
+
+    val chT = weakTypeOf[T]
+    val msgT = weakTypeOf[M]
+    val out = replyChannels(c.universe)(chT, msgT)
+    if (out.isEmpty)
+      abort(c, s"This ChannelRef does not support messages of type $msgT")
+
+    reify(askOps(channel.splice.actorRef, c.prefix.splice.value)(imp[Timeout](c).splice))
   }
 
-  def futureImpl[T <: ChannelList: c.WeakTypeTag, M: c.WeakTypeTag](c: Context {
-                                                                      type PrefixType = FutureOps[M]
-                                                                    })(channel: c.Expr[ChannelRef[T]]): c.Expr[Future[_]] = {
+  def futureImpl[A, T <: ChannelList: c.WeakTypeTag, M: c.WeakTypeTag](c: Context {
+                                                                         type PrefixType = FutureOps[M]
+                                                                       })(channel: c.Expr[ChannelRef[T]]): c.Expr[Future[_]] = {
     import c.universe._
-    val tree = askTree(c)(weakTypeOf[M], weakTypeOf[T])(c.Expr(Ident("c$1")), c.Expr(Ident("x$1")))
-    reify({
-      val c$1 = channel.splice.actorRef
-      c.prefix.splice.future.flatMap(x$1 ⇒ tree.splice)(ExecutionContexts.sameThreadExecutionContext)
+
+    val chT = weakTypeOf[T]
+    val msgT = weakTypeOf[M]
+    val reply = replyChannels(c.universe)(chT, msgT) match {
+      case Nil      ⇒ abort(c, s"This ChannelRef does not support messages of type $msgT")
+      case x :: Nil ⇒ x
+      case xs       ⇒ toChannels(c.universe)(xs)
+    }
+
+    implicit val tA = WeakTypeTag[A](c.mirror, new TypeCreator {
+      def apply[U <: Universe with Singleton](m: scala.reflect.api.Mirror[U]) = {
+        val imp = m.universe.mkImporter(c.universe)
+        imp.importType(reply)
+      }
     })
+    reify(askFuture[M, A](channel.splice.actorRef, c.prefix.splice.future)(imp[Timeout](c).splice))
   }
+
+  @inline def askOps[T](target: ActorRef, msg: Any)(implicit t: Timeout): Future[T] = akka.pattern.ask(target, msg).asInstanceOf[Future[T]]
+
+  def askFuture[T1, T2](target: ActorRef, future: Future[T1])(implicit t: Timeout): Future[T2] =
+    future.flatMap(akka.pattern.ask(target, _).asInstanceOf[Future[T2]])(ExecutionContexts.sameThreadExecutionContext)
 
   def askTree[M](c: Context with Singleton)(msgT: c.universe.Type, chT: c.universe.Type)(target: c.Expr[ActorRef], msg: c.Expr[M]): c.Expr[Future[_]] = {
     import c.universe._
