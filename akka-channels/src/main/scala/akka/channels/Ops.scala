@@ -30,7 +30,7 @@ class FutureOps[T](val future: Future[T]) extends AnyVal {
 
 class AnyOps[T](val value: T) extends AnyVal {
   def -!->[C <: ChannelList](channel: ChannelRef[C]): Unit = macro macros.Tell.opsImpl[C, T]
-  def -?->[C <: ChannelList](channel: ChannelRef[C]): Future[_] = macro macros.Ask.opsImpl[C, T]
+  def -?->[C <: ChannelList](channel: ChannelRef[C]): Future[_] = macro macros.Ask.opsImpl[Any, C, T]
 }
 
 class WrappedMessage[T <: ChannelList](val value: Any) extends AnyVal
