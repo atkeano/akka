@@ -74,7 +74,10 @@ private[akka] trait Dispatch { this: ActorCell ⇒
   final def suspend(): Unit =
     try dispatcher.systemDispatch(this, Suspend())
     catch {
-      case e @ (_: InterruptedException | NonFatal(_)) ⇒
+      case e: InterruptedException ⇒
+        system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "interrupted during message send"))
+        Thread.currentThread.interrupt()
+      case NonFatal(e) ⇒
         system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "swallowing exception during message send"))
     }
 
@@ -82,7 +85,10 @@ private[akka] trait Dispatch { this: ActorCell ⇒
   final def resume(causedByFailure: Throwable): Unit =
     try dispatcher.systemDispatch(this, Resume(causedByFailure))
     catch {
-      case e @ (_: InterruptedException | NonFatal(_)) ⇒
+      case e: InterruptedException ⇒
+        system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "interrupted during message send"))
+        Thread.currentThread.interrupt()
+      case NonFatal(e) ⇒
         system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "swallowing exception during message send"))
     }
 
@@ -90,7 +96,10 @@ private[akka] trait Dispatch { this: ActorCell ⇒
   final def restart(cause: Throwable): Unit =
     try dispatcher.systemDispatch(this, Recreate(cause))
     catch {
-      case e @ (_: InterruptedException | NonFatal(_)) ⇒
+      case e: InterruptedException ⇒
+        system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "interrupted during message send"))
+        Thread.currentThread.interrupt()
+      case NonFatal(e) ⇒
         system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "swallowing exception during message send"))
     }
 
@@ -98,21 +107,30 @@ private[akka] trait Dispatch { this: ActorCell ⇒
   final def stop(): Unit =
     try dispatcher.systemDispatch(this, Terminate())
     catch {
-      case e @ (_: InterruptedException | NonFatal(_)) ⇒
+      case e: InterruptedException ⇒
+        system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "interrupted during message send"))
+        Thread.currentThread.interrupt()
+      case NonFatal(e) ⇒
         system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "swallowing exception during message send"))
     }
 
   def tell(message: Any, sender: ActorRef): Unit =
     try dispatcher.dispatch(this, Envelope(message, if (sender eq null) system.deadLetters else sender, system))
     catch {
-      case e @ (_: InterruptedException | NonFatal(_)) ⇒
+      case e: InterruptedException ⇒
+        system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "interrupted during message send"))
+        Thread.currentThread.interrupt()
+      case NonFatal(e) ⇒
         system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "swallowing exception during message send"))
     }
 
   override def sendSystemMessage(message: SystemMessage): Unit =
     try dispatcher.systemDispatch(this, message)
     catch {
-      case e @ (_: InterruptedException | NonFatal(_)) ⇒
+      case e: InterruptedException ⇒
+        system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "interrupted during message send"))
+        Thread.currentThread.interrupt()
+      case NonFatal(e) ⇒
         system.eventStream.publish(Error(e, self.path.toString, clazz(actor), "swallowing exception during message send"))
     }
 
